@@ -17,14 +17,15 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QPalette, QFont
-
+import numpy as np
 
 TEST_CNT = 3  # 测试次数
 
-RAND_MIN_TIME=1000
-RAND_MAX_TIME=1500
+RAND_MIN_TIME = 1000
+RAND_MAX_TIME = 4000
 font = QFont("LXGW WenKai", 16)
-
+DEBUG = True
+# TODO：1.框要大；2.不能有字；3.
 
 class PVT(QWidget):
     def __init__(self):
@@ -36,7 +37,7 @@ class PVT(QWidget):
         self.combo_count = 0  # 连续小于300ms的反应次数
         self.max_combo = 0  # 最大连续反应次数
         self.timer = QTimer()  # 计时器，用于控制红色方块的显示
-        self.timer.timeout.connect(self.displayRed) # 
+        self.timer.timeout.connect(self.displayRed)  #
         self.start_time = None  # 开始计时的时间
         self.is_red_displayed = False  # 红色方块是否正在显示
         self.is_test_started = False  # 测试是否已经开始
@@ -46,7 +47,10 @@ class PVT(QWidget):
         self.median_response_time = 0
         self.false_clicks = 0
         self.first_response_false = None
+
     def analyzeResults(self):
+        # "编号",  "测试次数",  "平均反应时间", "中位数反应时间", "最大Combo数",  "失误（慢于500ms）次数",
+        #  "错误点击次数",    "最快时间",       "最慢时间",            ]
         with shelve.open("pvt_results") as db:
             self.results_table.setRowCount(len(db))
             for i, (key, results) in enumerate(db.items()):
@@ -55,19 +59,29 @@ class PVT(QWidget):
                     i, 1, QTableWidgetItem(str(len(results["反应时间列表"])))
                 )
                 self.results_table.setItem(
-                    i, 2, QTableWidgetItem("{:.2f}".format(sum(results["反应时间列表"])))
+                    i, 2, QTableWidgetItem(f'{results["平均反应时间"]:.2f}')
                 )
                 self.results_table.setItem(
-                    i, 3, QTableWidgetItem("{:.2f}".format(results["平均反应时间"]))
+                    i, 3, QTableWidgetItem(f'{results["中位数反应时间"]:.2f}')
                 )
                 self.results_table.setItem(
                     i, 4, QTableWidgetItem(str(results["最大Combo数"]))
+                )
+                self.results_table.setItem(
+                    i, 5, QTableWidgetItem(str(results["失误（慢于500ms）次数"]))
+                )
+                self.results_table.setItem(
+                    i, 6, QTableWidgetItem(str(results["错误点击次数"]))
+                )
+                self.results_table.setItem(i, 7, QTableWidgetItem(str(results["最快时间"])))
+                self.results_table.setItem(i, 8, QTableWidgetItem(str(results["最慢时间"])))
+                self.results_table.setItem(
+                    i, 9, QTableWidgetItem(str(results["初次点击是否错误"]))
                 )
 
     def initUI(self):
         # 设置布局和界面元素
         self.layout = QVBoxLayout()
-        
 
         self.name_label = QLabel("请输入你的编号:")
         self.layout.addWidget(self.name_label)
@@ -134,9 +148,20 @@ class PVT(QWidget):
         self.layout.addWidget(self.analysis_button)
 
         self.results_table = QTableWidget(self)
-        self.results_table.setColumnCount(5)
+        self.results_table.setColumnCount(9)
         self.results_table.setHorizontalHeaderLabels(
-            ["编号", "尝试次数", "总反应时间(ms)", "平均反应时间(ms)", "最大Combo数"]
+            [
+                "编号",
+                "测试次数",
+                "平均反应时间",
+                "中位数反应时间",
+                "最大Combo数",
+                "失误（慢于500ms）次数",
+                "错误点击次数",
+                "最快时间",
+                "最慢时间",
+                "初次点击是否错误",
+            ]
         )
         self.results_table.setSortingEnabled(True)  # 启用排序
         self.layout.addWidget(self.results_table)  # 添加到布局中
@@ -163,7 +188,7 @@ class PVT(QWidget):
             self.name_edit,
             self.name_label,
             self.analysis_button,
-            self.status_label
+            self.status_label,
         ]
         for widget in self.widgets:
             widget.setFont(font)
@@ -200,6 +225,12 @@ class PVT(QWidget):
         # 捕捉鼠标点击事件
         if self.is_red_displayed and self.red_label.geometry().contains(event.pos()):
             self.captureResponse()
+        if not self.is_red_displayed and self.is_test_started:
+            self.false_clicks += 1
+            if self.first_response_false is None:
+                self.first_response_false = True
+            else:
+                self.first_response_false = False
 
     def keyPressEvent(self, event):
         # 捕捉键盘事件
@@ -237,7 +268,7 @@ class PVT(QWidget):
                 self.result_text.append("请输入有效的测试时间")
                 self.is_test_started = False
                 return
-            self.test_start_time = time.time() # 如果按时间测试，需要记录下最开始的测试时间
+            self.test_start_time = time.time()  # 如果按时间测试，需要记录下最开始的测试时间
             self.timer.timeout.connect(self.updateTimeTest)
             self.timer.start(random.randint(RAND_MIN_TIME, RAND_MAX_TIME))
         # self.displayRed() # 第一次呈现
@@ -246,7 +277,7 @@ class PVT(QWidget):
         self.stop_and_show_button.setDisabled(False)
 
     def updateTimeTest(self):
-        elapsed_time = time.time() - self.test_start_time # 所有流逝的时间
+        elapsed_time = time.time() - self.test_start_time  # 所有流逝的时间
         if elapsed_time >= self.target_time:
             self.finishTest()
         else:
@@ -280,16 +311,12 @@ class PVT(QWidget):
 
     def captureResponse(self):
         # 捕捉反应
-        if not self.is_red_displayed:
-            self.false_clicks += 1
-            if self.first_response_false is None:
-                self.first_response_false = True
-            return
         self.red_label.hide()
         self.is_red_displayed = False
         response_time = (time.time() - self.start_time) * 1000  # 将反应时间转换为毫秒
         self.response_times.append(response_time)
-        self.result_text.append("反应时间: {:.2f} ms".format(response_time))
+        if DEBUG:
+            self.result_text.append("反应时间: {:.2f} ms".format(response_time))
 
         if response_time < 300:
             self.combo_count += 1
@@ -302,12 +329,6 @@ class PVT(QWidget):
             and len(self.response_times) == self.target_count
         ):
             self.finishTest()
-        # elif self.test_type_combo.currentText() == "按时间测试（分钟）":
-        #     self.displayRed()
-        # else:
-        #     self.timer.start(random.randint(RAND_MIN_TIME, RAND_MAX_TIME))
-
-
 
     def finishTest(self):
         # 完成测试
@@ -316,16 +337,22 @@ class PVT(QWidget):
         self.stop_button.setDisabled(True)  # 测试结束后，使“终止测试”按钮不可用
         self.stop_and_show_button.setDisabled(True)  # 测试结束后，使“终止测试并展示结果”按钮不可用
         self.max_combo = max(self.combo_count, self.max_combo)
-        average_response_time = sum(self.response_times) / len(self.response_times)
-        self.result_text.append("\n所有反应时间: {}".format(self.response_times))
-        self.result_text.append("平均反应时间: {:.2f} ms".format(average_response_time))
-        self.result_text.append("最大Combo数: {}".format(self.max_combo))
+        if DEBUG:
+            self.result_text.append("\n所有反应时间: {}".format(self.response_times))
 
         with shelve.open("pvt_results") as db:
             db[self.name_edit.text()] = {
                 "反应时间列表": self.response_times,
-                "平均反应时间": average_response_time,
+                "平均反应时间": np.mean(self.response_times),
                 "最大Combo数": self.max_combo,
+                "错误点击次数": self.false_clicks,
+                "中位数反应时间": np.median(self.response_times),
+                "最快时间": min(self.response_times),
+                "最慢时间": max(self.response_times),
+                "失误（慢于500ms）次数": len(
+                    list(filter(lambda x: x >= 500, self.response_times))
+                ),
+                "初次点击是否错误": self.first_response_false,
             }
         self.start_button.setDisabled(False)
         self.status_label.setText("测试完成")
