@@ -7,7 +7,6 @@ from PyQt5.QtWidgets import (
     QApplication,
     QWidget,
     QVBoxLayout,
-    QStackedLayout,
     QLabel,
     QLineEdit,
     QPushButton,
@@ -20,7 +19,6 @@ from PyQt5.QtWidgets import (
     QAction,
     QMessageBox,
     QMainWindow,
-    QStackedWidget
 )
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QFont
@@ -28,15 +26,10 @@ import numpy as np
 
 TEST_CNT = 3  # 测试次数
 
-RAND_MIN_TIME = 1000
-RAND_MAX_TIME = 4000
-font = QFont("LXGW WenKai", 16)
-DEBUG = True
-# TODO：1.框要大；
-# TODO：2.不能有字；
-# TODO：3.再加个时间记录的；
-# TODO：4.优化表格呈现那里；
-# TODO：5.把功能做到书签里
+RAND_MIN_TIME = 1000 # 等待最小时间
+RAND_MAX_TIME = 4000 # 等待最大时间
+font = QFont("LXGW WenKai", 16) # 选中字体
+DEBUG = False # 生产环境
 
 
 class Result(SQLModel, table=True):
@@ -58,13 +51,13 @@ engine = create_engine("sqlite:///results.db")
 SQLModel.metadata.create_all(engine)
 
 
-
-class BaseWidget(QWidget): # 基础布局，应当什么都有
+class PVT(QWidget):
     def __init__(self):
         super().__init__()
-        self.stackedLayout = QStackedLayout(self)
-        self.initUI(production=False)
-
+        if DEBUG:
+            self.initUI(production=False)
+        else:
+            self.initUI(production=True)
         self.response_times = []  # 存储反应时间的列表
         self.combo_count = 0  # 连续小于300ms的反应次数
         self.max_combo = 0  # 最大连续反应次数
@@ -80,6 +73,7 @@ class BaseWidget(QWidget): # 基础布局，应当什么都有
     def analyzeResults(self):
         # "编号",  "测试次数",  "平均反应时间", "中位数反应时间", "最大Combo数",  "失误（慢于500ms）次数",
         #  "错误点击次数","最快时间","最慢时间",测试时间
+
         with Session(engine) as session:
             results = session.exec(select(Result)).all()
             self.results_table.setRowCount(len(results))
@@ -132,42 +126,40 @@ class BaseWidget(QWidget): # 基础布局，应当什么都有
 
     def initBasic(self):
         self.name_label = QLabel("请输入你的编号:")
-        self.layout.addWidget(self.name_label)
+        self.layout.addWidget(self.name_label,stretch=1)
         self.name_edit = QLineEdit(self)
         self.layout.addWidget(self.name_edit)
         self.start_button = QPushButton("开始测试", self)
         self.start_button.clicked.connect(self.startTest)
-        self.layout.addWidget(self.start_button)
+        self.layout.addWidget(self.start_button,stretch=2)
         self.stop_button = QPushButton("终止测试", self)
         self.stop_button.clicked.connect(self.stopTest)
         self.stop_button.setDisabled(True)  # 初始状态下“终止测试”按钮不可用
-        self.layout.addWidget(self.stop_button)
+        self.layout.addWidget(self.stop_button,stretch=2)
 
     def initUI(self, production=False):
         # 设置布局和界面元素
-        
-        layout = QVBoxLayout()
+        self.layout = QVBoxLayout()
+        if not production:
+            self.initMenu()  # 由于菜单只有QMainWindow有，所以用个trick
         self.initBasic()
         if not production:
             self.stop_and_show_button = QPushButton("终止测试并展示结果", self)
             self.stop_and_show_button.clicked.connect(self.stopTestAndShowResults)
             self.stop_and_show_button.setDisabled(True)  # 初始状态下“终止测试并展示结果”按钮不可用
-            layout.addWidget(self.stop_and_show_button)
-
+            self.layout.addWidget(self.stop_and_show_button,stretch=2)
         self.red_label = QLabel(self)
-        self.red_label.setFixedSize(200, 200)
-        self.red_label.setStyleSheet("background-color: red; border-radius: 100px;")
-        self.red_label.setAlignment(Qt.AlignCenter)
+        
+        self.red_label.setStyleSheet("background-color: red; border-radius: 38px;")
         self.red_label.hide()
-        layout.addWidget(self.red_label)
+        self.layout.addWidget(self.red_label,alignment=Qt.AlignCenter)
 
         self.result_text = QTextEdit(self)
         self.result_text.setReadOnly(True)
         self.result_text.setFixedHeight(150)  # 设置文本框的高度
-        self.layout.addWidget(self.result_text)
+        self.layout.addWidget(self.result_text,stretch=1)
 
-
-
+        self.setLayout(self.layout)
         screen_size = QApplication.primaryScreen().size()
         width = screen_size.width() * 1.5 / 2
         height = screen_size.height() * 1.5 / 2
@@ -179,54 +171,68 @@ class BaseWidget(QWidget): # 基础布局，应当什么都有
         )
         self.setWindowTitle("Psychomotor Vigilance Test V2023.10——by Meng")
         self.show()
-
-        # self.copy_button = QPushButton("复制选中成绩", self)
-        # self.copy_button.clicked.connect(self.copyResults)
-        # self.layout.addWidget(self.copy_button)
         self.analysis_button = QPushButton("成绩分析", self)
         self.analysis_button.clicked.connect(self.analyzeResults)
         self.analysis_button.setStyleSheet(
             "QPushButton { background-color: #2196F3; color: white; }"
         )
-        self.layout.addWidget(self.analysis_button)
+        self.initTable()
+        if not production:
+            self.layout.addWidget(self.analysis_button)
+            self.layout.addWidget(self.results_table)
         self.test_type_combo = QComboBox(self)
-        self.test_type_combo.addItems(["按次数测试", "按时间测试（分钟）"])
+        self.test_type_combo.addItems(["按时间测试（分钟）","按次数测试",])
         self.test_type_combo.setFont(font)
         self.test_type_combo.currentIndexChanged.connect(self.updateTestType)
         self.test_input = QLineEdit(self)
+        # self.test_input.setPlaceholderText("输入次数或时间")
+        self.test_input.setText("3")
+        self.layout.addWidget(self.test_type_combo,stretch=2)
+        self.layout.addWidget(self.test_input,stretch=2)
         if not production:
-            self.initResultTable()
-            self.layout.addWidget(self.test_type_combo)
-            self.test_input.setPlaceholderText("输入次数或时间")
-            self.layout.addWidget(self.test_input)
-        else:
-            self.test_type_combo.setCurrentIndex(0)  # TODO：调整为按时间
+            self.test_type_combo.setCurrentIndex(1)
             self.test_input.setText("2")
+        # else:
+
+
         self.status_label = QLabel("等待开始...", self)
         self.layout.addWidget(self.status_label)
         self.set_widgers_font()
 
-        self.start_button.setMinimumSize(150, 30)  # 150 是宽度, 50 是高度。你可以根据需要进行调整
-        self.stop_button.setMinimumSize(150, 30)
-        self.stop_and_show_button.setMinimumSize(150, 30)
-        self.setLayout(self.layout)
+        self.name_label.setMaximumHeight(70)
+        self.start_button.setMinimumHeight(100)  
+        self.stop_button.setMinimumHeight(100)  
+        self.test_input.setMinimumHeight(90) 
+        self.test_type_combo.setMinimumHeight(100) 
+        self.red_label.setFixedSize(200, 200)
+        # self.red_label.setMinimumHeight(500) 
+        if not production:
+            self.stop_and_show_button.setMinimumHeight(150) 
+            self.styleWidgets()
 
     def set_widgers_font(self):
         self.widgets = [
             self.start_button,
             self.stop_button,
-            self.stop_and_show_button,
             self.result_text,
-            self.test_input,
             self.name_edit,
             self.name_label,
-            self.analysis_button,
             self.status_label,
+            self.test_input
         ]
+        if DEBUG:
+            self.widgets.extend(
+                [
+                    self.stop_and_show_button,
+                    self.result_text,
+                    self.test_input,
+                    self.analysis_button,
+                ]
+            )
         for widget in self.widgets:
             widget.setFont(font)
 
-    def initResultTable(self):
+    def initTable(self):
         self.results_table = QTableWidget(self)
         self.results_table.setColumnCount(11)
         self.results_table.setHorizontalHeaderLabels(
@@ -245,8 +251,53 @@ class BaseWidget(QWidget): # 基础布局，应当什么都有
             ]
         )
         self.results_table.setSortingEnabled(True)  # 启用排序
-        self.layout.addWidget(self.results_table)  # 添加到布局中
 
+    def initMenu(self):
+        self.innerWindow = QMainWindow()
+        menubar = self.innerWindow.menuBar()
+        file_menu = menubar.addMenu("文件")
+        exit_action = QAction("退出", self)
+        exit_action.triggered.connect(self.close)
+        file_menu.addAction(exit_action)
+
+        settings_menu = menubar.addMenu("设置")
+
+        # 添加“切换到测试版本”菜单项
+        switch_to_test_action = QAction("切换到测试版本", self)
+        switch_to_test_action.triggered.connect(self.switch_to_test)
+        settings_menu.addAction(switch_to_test_action)
+
+        # 添加“切换到生产版本”菜单项
+        switch_to_prod_action = QAction("切换到生产版本", self)
+        switch_to_prod_action.triggered.connect(self.switch_to_prod)
+        settings_menu.addAction(switch_to_prod_action)
+
+        # 创建“帮助”菜单
+        help_menu = menubar.addMenu("帮助")
+        # 添加“关于”菜单项
+        about_action = QAction("关于", self)
+        about_action.triggered.connect(self.showAbout)
+        help_menu.addAction(about_action)
+
+        # 创建“工具”菜单
+        tools_menu = menubar.addMenu("工具")
+        # 添加“成绩分析”菜单项
+        score_analysis_action = QAction("成绩分析", self)
+        score_analysis_action.triggered.connect(self.analyzeResults)
+        tools_menu.addAction(score_analysis_action)
+
+        self.layout.addWidget(self.innerWindow)
+
+    def switch_to_test(self):
+        self.status_label.setText("当前版本：测试版")
+        self.initUI(production=False)
+
+    def switch_to_prod(self):
+        self.status_label.setText("当前版本：生产版")
+        self.initUI(production=True)
+
+    def showAbout(self):
+        QMessageBox.about(self, "关于", "欢迎使用北京师范大学心理学部志蒙开发的PVT程序！Enjoy It!")
 
     def copyResults(self):
         selected_range = self.results_table.selectedRanges()[0]  # 获取选中的区域
@@ -325,7 +376,8 @@ class BaseWidget(QWidget): # 基础布局，应当什么都有
         # self.displayRed() # 第一次呈现
         self.start_button.setDisabled(True)
         self.stop_button.setDisabled(False)
-        self.stop_and_show_button.setDisabled(False)
+        if DEBUG:
+            self.stop_and_show_button.setDisabled(False)
 
     def updateTimeTest(self):
         elapsed_time = time.time() - self.test_start_time  # 所有流逝的时间
@@ -346,7 +398,8 @@ class BaseWidget(QWidget): # 基础布局，应当什么都有
             self.result_text.append("\n测试被终止。")
             self.start_button.setDisabled(False)  # 使“开始测试”按钮可用
             self.stop_button.setDisabled(True)  # 使“终止测试”按钮不可用
-            self.stop_and_show_button.setDisabled(True)  # 使“终止测试并展示结果”按钮不可用
+            if DEBUG:
+                self.stop_and_show_button.setDisabled(True)  # 使“终止测试并展示结果”按钮不可用
 
     def stopTestAndShowResults(self):
         # 终止测试并展示结果
@@ -386,7 +439,9 @@ class BaseWidget(QWidget): # 基础布局，应当什么都有
         self.is_test_started = False
         self.timer.stop()
         self.stop_button.setDisabled(True)  # 测试结束后，使“终止测试”按钮不可用
-        self.stop_and_show_button.setDisabled(True)  # 测试结束后，使“终止测试并展示结果”按钮不可用
+        self.result_text.append("测试完成")
+        if DEBUG:
+            self.stop_and_show_button.setDisabled(True)  # 测试结束后，使“终止测试并展示结果”按钮不可用
         self.max_combo = max(self.combo_count, self.max_combo)
         if DEBUG:
             self.result_text.append("\n所有反应时间: {}".format(self.response_times))
@@ -410,67 +465,8 @@ class BaseWidget(QWidget): # 基础布局，应当什么都有
         self.start_button.setDisabled(False)
         self.status_label.setText("测试完成")
 
-class DevelopWidget(BaseWidget):
-    pass
-
-class PVT(QMainWindow):
-    def __init__(self):
-        super().__init__()
-
-        self.stackedWidget = QStackedWidget(self)
-        self.setCentralWidget(self.stackedWidget)
-
-        self.layout1 = BaseWidget()
-        self.layout2 = DevelopWidget()
-
-        self.stackedWidget.addWidget(self.layout1)
-        self.stackedWidget.addWidget(self.layout2)
-
-        self.toolbar = self.addToolBar('Switch Layout')
-        self.switch_button = QPushButton('Switch Layout')
-        self.toolbar.addWidget(self.switch_button)
-        self.switch_button.clicked.connect(self.switch_layout)
-
-    def switch_layout(self):
-        current_index = self.stackedWidget.currentIndex()
-        self.stackedWidget.setCurrentIndex(1 - current_index)# 在0和1之间切换
-
-    def initMenu(self):
-        menubar = self.menuBar()
-        file_menu = menubar.addMenu("文件")
-        exit_action = QAction("退出", self)
-        exit_action.triggered.connect(self.close)
-        file_menu.addAction(exit_action)
-
-        settings_menu = menubar.addMenu("设置")
-
-        # 添加“切换到测试版本”菜单项
-        switch_to_test_action = QAction("切换到测试版本", self)
-        switch_to_test_action.triggered.connect(self.switch_layout)
-        settings_menu.addAction(switch_to_test_action)
-
-        # 创建“帮助”菜单
-        help_menu = menubar.addMenu("帮助")
-        # 添加“关于”菜单项
-        about_action = QAction("关于", self)
-        about_action.triggered.connect(self.showAbout)
-        help_menu.addAction(about_action)
-
-        # 创建“工具”菜单
-        tools_menu = menubar.addMenu("工具")
-        # 添加“成绩分析”菜单项
-        score_analysis_action = QAction("成绩分析", self)
-        score_analysis_action.triggered.connect(self.analyzeResults)
-        tools_menu.addAction(score_analysis_action)
-
-        self.layout.addWidget(self.innerWindow)
-
-    def showAbout(self):
-        QMessageBox.about(self, "关于", "欢迎使用北京师范大学心理学部志蒙开发的PVT程序！Enjoy It!")
-
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     pvt = PVT()
-    pvt.show()
     sys.exit(app.exec_())
