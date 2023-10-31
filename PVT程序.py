@@ -1,7 +1,8 @@
 import sys
 import random
+from datetime import datetime
 import time
-import shelve
+from sqlmodel import Field, SQLModel, create_engine, Session, select
 from PyQt5.QtWidgets import (
     QApplication,
     QWidget,
@@ -10,13 +11,17 @@ from PyQt5.QtWidgets import (
     QLineEdit,
     QPushButton,
     QTextEdit,
-    QDesktopWidget,
     QTableWidgetItem,
     QTableWidget,
     QComboBox,
+    QMenuBar,
+    QMenu,
+    QAction,
+    QMessageBox,
+    QMainWindow,
 )
 from PyQt5.QtCore import Qt, QTimer
-from PyQt5.QtGui import QPalette, QFont
+from PyQt5.QtGui import QFont
 import numpy as np
 
 TEST_CNT = 3  # 测试次数
@@ -25,7 +30,31 @@ RAND_MIN_TIME = 1000
 RAND_MAX_TIME = 4000
 font = QFont("LXGW WenKai", 16)
 DEBUG = True
-# TODO：1.框要大；2.不能有字；3.
+# TODO：1.框要大；
+# TODO：2.不能有字；
+# TODO：3.再加个时间记录的；
+# TODO：4.优化表格呈现那里；
+# TODO：5.把功能做到书签里
+
+
+class Result(SQLModel, table=True):
+    id: int = Field(primary_key=True, autoincrement=True)
+    name: str
+    reaction_times: str
+    average_reaction_time: float
+    max_combo: int
+    false_clicks: int
+    median_reaction_time: float
+    fastest_time: float
+    slowest_time: float
+    mistakes_slow_500ms: int
+    first_response_false: bool
+    create_time: datetime
+
+
+engine = create_engine("sqlite:///results.db")
+SQLModel.metadata.create_all(engine)
+
 
 class PVT(QWidget):
     def __init__(self):
@@ -42,47 +71,53 @@ class PVT(QWidget):
         self.is_red_displayed = False  # 红色方块是否正在显示
         self.is_test_started = False  # 测试是否已经开始
         self.mistakes = 0
-        self.fastest_10_percent = []
-        self.slowest_10_percent = []
-        self.median_response_time = 0
-        self.false_clicks = 0
+        self.false_clicks = 0 # 错误点击，没有出现但点击了
         self.first_response_false = None
 
     def analyzeResults(self):
         # "编号",  "测试次数",  "平均反应时间", "中位数反应时间", "最大Combo数",  "失误（慢于500ms）次数",
-        #  "错误点击次数",    "最快时间",       "最慢时间",            ]
-        with shelve.open("pvt_results") as db:
-            self.results_table.setRowCount(len(db))
-            for i, (key, results) in enumerate(db.items()):
-                self.results_table.setItem(i, 0, QTableWidgetItem(key))
+        #  "错误点击次数","最快时间","最慢时间",测试时间
+
+        with Session(engine) as session:
+            results = session.exec(select(Result)).all()
+            for i, result in enumerate(results):
+                self.results_table.setItem(i, 0, QTableWidgetItem(result.name))
                 self.results_table.setItem(
-                    i, 1, QTableWidgetItem(str(len(results["反应时间列表"])))
+                    i, 1, QTableWidgetItem(str(len(result.reaction_times)))
                 )
                 self.results_table.setItem(
-                    i, 2, QTableWidgetItem(f'{results["平均反应时间"]:.2f}')
+                    i, 2, QTableWidgetItem(f"{np.mean(result.response_times):.2f}")
                 )
                 self.results_table.setItem(
-                    i, 3, QTableWidgetItem(f'{results["中位数反应时间"]:.2f}')
+                    i, 3, QTableWidgetItem(f"{np.median(result.response_times):.2f}")
                 )
                 self.results_table.setItem(
-                    i, 4, QTableWidgetItem(str(results["最大Combo数"]))
+                    i, 4, QTableWidgetItem(str(result.max_combo))
                 )
                 self.results_table.setItem(
-                    i, 5, QTableWidgetItem(str(results["失误（慢于500ms）次数"]))
+                    i,
+                    5,
+                    QTableWidgetItem(
+                        str(len([x for x in result.response_times if x >= 500]))
+                    ),
                 )
                 self.results_table.setItem(
-                    i, 6, QTableWidgetItem(str(results["错误点击次数"]))
+                    i, 6, QTableWidgetItem(str(result.false_clicks))
                 )
-                self.results_table.setItem(i, 7, QTableWidgetItem(str(results["最快时间"])))
-                self.results_table.setItem(i, 8, QTableWidgetItem(str(results["最慢时间"])))
                 self.results_table.setItem(
-                    i, 9, QTableWidgetItem(str(results["初次点击是否错误"]))
+                    i, 7, QTableWidgetItem(str(min(result.response_times)))
+                )
+                self.results_table.setItem(
+                    i, 8, QTableWidgetItem(str(max(result.response_times)))
+                )
+                self.results_table.setItem(
+                    i, 9, QTableWidgetItem(str(result.first_response))
                 )
 
     def initUI(self):
         # 设置布局和界面元素
         self.layout = QVBoxLayout()
-
+        self.init_menu()  # 由于菜单只有QMainWindow有，所以用个trick
         self.name_label = QLabel("请输入你的编号:")
         self.layout.addWidget(self.name_label)
 
@@ -196,6 +231,55 @@ class PVT(QWidget):
         self.start_button.setMinimumSize(150, 30)  # 150 是宽度, 50 是高度。你可以根据需要进行调整
         self.stop_button.setMinimumSize(150, 30)
         self.stop_and_show_button.setMinimumSize(150, 30)
+
+    def init_menu(self):
+        self.innerWindow = QMainWindow()
+        menubar = self.innerWindow.menuBar()
+        file_menu = menubar.addMenu("文件")
+        exit_action = QAction("退出", self)
+        exit_action.triggered.connect(self.close)
+        file_menu.addAction(exit_action)
+
+        settings_menu = menubar.addMenu("设置")
+
+        # 添加“切换到测试版本”菜单项
+        switch_to_test_action = QAction("切换到测试版本", self)
+        switch_to_test_action.triggered.connect(self.switch_to_test)
+        settings_menu.addAction(switch_to_test_action)
+
+        # 添加“切换到生产版本”菜单项
+        switch_to_prod_action = QAction("切换到生产版本", self)
+        switch_to_prod_action.triggered.connect(self.switch_to_prod)
+        settings_menu.addAction(switch_to_prod_action)
+
+        # 创建“帮助”菜单
+        help_menu = menubar.addMenu("帮助")
+
+        # 添加“关于”菜单项
+        about_action = QAction("关于", self)
+        about_action.triggered.connect(self.show_about)
+        help_menu.addAction(about_action)
+
+        # 创建“工具”菜单
+        tools_menu = menubar.addMenu("工具")
+
+        # 添加“成绩分析”菜单项
+        score_analysis_action = QAction("成绩分析", self)
+        score_analysis_action.triggered.connect(self.analyzeResults)
+        tools_menu.addAction(score_analysis_action)
+
+        self.layout.addWidget(self.innerWindow)
+
+    def switch_to_test(self):
+        self.status_label.setText("当前版本：测试版")
+        print("切换到测试版本")
+
+    def switch_to_prod(self):
+        self.status_label.setText("当前版本：生产版")
+        print("切换到生产版本")
+
+    def show_about(self):
+        QMessageBox.about(self, "关于", "这是一个PyQt示例程序")
 
     def copyResults(self):
         selected_range = self.results_table.selectedRanges()[0]  # 获取选中的区域
@@ -339,21 +423,23 @@ class PVT(QWidget):
         self.max_combo = max(self.combo_count, self.max_combo)
         if DEBUG:
             self.result_text.append("\n所有反应时间: {}".format(self.response_times))
+        with Session(engine) as session:
+            result = Result(
+                name=self.name_edit.text(),
+                reaction_times=",".join(map(str, self.response_times)),
+                average_reaction_time=float(np.mean(self.response_times)),
+                max_combo=self.max_combo,
+                false_clicks=self.false_clicks,
+                median_reaction_time=float(np.median(self.response_times)),
+                fastest_time=float(min(self.response_times)),
+                slowest_time=float(max(self.response_times)),
+                mistakes_slow_500ms=len([x for x in self.response_times if x >= 500]),
+                first_response_false=self.first_response_false,
+                create_time=datetime.now(),
+            )
 
-        with shelve.open("pvt_results") as db:
-            db[self.name_edit.text()] = {
-                "反应时间列表": self.response_times,
-                "平均反应时间": np.mean(self.response_times),
-                "最大Combo数": self.max_combo,
-                "错误点击次数": self.false_clicks,
-                "中位数反应时间": np.median(self.response_times),
-                "最快时间": min(self.response_times),
-                "最慢时间": max(self.response_times),
-                "失误（慢于500ms）次数": len(
-                    list(filter(lambda x: x >= 500, self.response_times))
-                ),
-                "初次点击是否错误": self.first_response_false,
-            }
+            session.add(result)
+            session.commit()
         self.start_button.setDisabled(False)
         self.status_label.setText("测试完成")
 
