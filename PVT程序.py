@@ -21,7 +21,7 @@ from PyQt5.QtWidgets import (
     QMainWindow,
 )
 from PyQt5.QtCore import Qt, QTimer
-from PyQt5.QtGui import QFont
+from PyQt5.QtGui import QFont, QIcon
 import numpy as np
 
 TEST_CNT = 3  # 测试次数
@@ -125,17 +125,20 @@ class PVT(QWidget):
         )
 
     def initBasic(self):
+        self.setWindowIcon(QIcon("./logo.png"))
         self.name_label = QLabel("请输入你的编号:")
-        self.layout.addWidget(self.name_label, stretch=1)
+        self.layout.addWidget(self.name_label)
         self.name_edit = QLineEdit(self)
         self.layout.addWidget(self.name_edit)
         self.start_button = QPushButton("开始测试", self)
         self.start_button.clicked.connect(self.startTest)
-        self.layout.addWidget(self.start_button, stretch=2)
+        self.layout.addWidget(
+            self.start_button,
+        )
         self.stop_button = QPushButton("终止测试", self)
         self.stop_button.clicked.connect(self.stopTest)
         self.stop_button.setDisabled(True)  # 初始状态下“终止测试”按钮不可用
-        self.layout.addWidget(self.stop_button, stretch=2)
+        self.layout.addWidget(self.stop_button)
 
     def initUI(self, production=False):
         # 设置布局和界面元素
@@ -147,7 +150,7 @@ class PVT(QWidget):
             self.stop_and_show_button = QPushButton("终止测试并展示结果", self)
             self.stop_and_show_button.clicked.connect(self.stopTestAndShowResults)
             self.stop_and_show_button.setDisabled(True)  # 初始状态下“终止测试并展示结果”按钮不可用
-            self.layout.addWidget(self.stop_and_show_button, stretch=2)
+            self.layout.addWidget(self.stop_and_show_button)
         self.red_label = QLabel(self)
 
         self.red_label.setStyleSheet("background-color: red; border-radius: 38px;")
@@ -157,7 +160,7 @@ class PVT(QWidget):
         self.result_text = QTextEdit(self)
         self.result_text.setReadOnly(True)
         self.result_text.setFixedHeight(150)  # 设置文本框的高度
-        self.layout.addWidget(self.result_text, stretch=1)
+        self.layout.addWidget(self.result_text)
 
         self.setLayout(self.layout)
         screen_size = QApplication.primaryScreen().size()
@@ -191,8 +194,8 @@ class PVT(QWidget):
         self.test_input = QLineEdit(self)
         # self.test_input.setPlaceholderText("输入次数或时间")
         self.test_input.setText("3")
-        self.layout.addWidget(self.test_type_combo, stretch=2)
-        self.layout.addWidget(self.test_input, stretch=2)
+        self.layout.addWidget(self.test_type_combo)
+        self.layout.addWidget(self.test_input)
         if not production:
             self.test_type_combo.setCurrentIndex(1)
             self.test_input.setText("2")
@@ -200,20 +203,24 @@ class PVT(QWidget):
 
         self.status_label = QLabel("等待开始...", self)
         self.layout.addWidget(self.status_label)
+        self.set_widgets()
         self.set_widgers_font()
 
-        self.name_label.setMaximumHeight(70)
-        self.start_button.setMinimumHeight(100)
-        self.stop_button.setMinimumHeight(100)
-        self.test_input.setMinimumHeight(90)
-        self.test_type_combo.setMinimumHeight(100)
+        # self.name_label.setMaximumHeight(70)
+        # self.start_button.setMinimumHeight(70)
+        # self.stop_button.setMinimumHeight(70)
+        # self.stop_and_show_button.setMaximumHeight(70)
+        # self.test_input.setMinimumHeight(90)
+        # self.test_type_combo.setMinimumHeight(100)
         self.red_label.setFixedSize(200, 200)
         # self.red_label.setMinimumHeight(500)
         if not production:
-            self.stop_and_show_button.setMinimumHeight(150)
+            # self.stop_and_show_button.setMinimumHeight(150)
+            # self.analysis_button.setMinimumHeight(400)
+            # self.results_table.setMinimumHeight(300)
             self.styleWidgets()
 
-    def set_widgers_font(self):
+    def set_widgets(self):
         self.widgets = [
             self.start_button,
             self.stop_button,
@@ -231,8 +238,11 @@ class PVT(QWidget):
                     self.result_text,
                     self.test_input,
                     self.analysis_button,
+                    self.results_table,
                 ]
             )
+
+    def set_widgers_font(self):
         for widget in self.widgets:
             widget.setFont(font)
 
@@ -340,10 +350,10 @@ class PVT(QWidget):
 
     def keyPressEvent(self, event):
         # 捕捉键盘事件
-        if event.key() == Qt.Key_Space and self.is_red_displayed:
-            self.captureResponse()
-            self.red_label.setFocus()  # 将焦点设置到其他控件上，防止“开始测试”按钮被触发
-        elif event.key() == Qt.Key_Escape:
+        # if event.key() == Qt.Key_Space and self.is_red_displayed:
+        #     self.captureResponse()
+        #     self.red_label.setFocus()  # 将焦点设置到其他控件上，防止“开始测试”按钮被触发
+        if event.key() == Qt.Key_Escape:
             self.stopTest()
 
     def startTest(self):
