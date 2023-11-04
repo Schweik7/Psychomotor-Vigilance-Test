@@ -29,7 +29,7 @@ TEST_CNT = 3  # 测试次数
 RAND_MIN_TIME = 1000  # 等待最小时间
 RAND_MAX_TIME = 10000  # 等待最大时间，单位是毫秒
 font = QFont("LXGW WenKai", 20)  # 选中字体
-DEBUG = False  # 生产环境
+DEBUG = True  # 生产环境
 
 
 class Result(SQLModel, table=True):
@@ -126,7 +126,7 @@ class PVT(QWidget):
 
     def initBasic(self):
         self.setWindowIcon(QIcon("./logo.png"))
-        self.name_label = QLabel("你好，非常感谢你参与实验！\n接下来，屏幕中央会随机出现一个红色方块，方块出现的间隔时间是不固定的，可能在1-10秒不等\n你需要在方块出现的瞬间，立刻在方块中点击鼠标左键\n请你保持专注，并在方块出现的第一时间进行快速而准确的反应，记住不可以提前点击鼠标\n请确保你已经充分理解了任务要求，并准备好开始正式实验\n如果你有任何疑问，请及时询问实验人员，谢谢！\n请输入你的编号:")
+        self.name_label = QLabel("你好，非常感谢你参与实验！\n接下来，屏幕中央会随机出现一个红色方块，方块出现的间隔时间是不固定的，可能在1-10秒不等\n你需要在方块出现的瞬间，立刻点击鼠标左键\n请你保持专注，并在方块出现的第一时间进行快速而准确的反应，记住不可以提前点击鼠标\n请确保你已经充分理解了任务要求，并准备好开始正式实验\n如果你有任何疑问，请及时询问实验人员，谢谢！\n请输入你的编号:")
         self.layout.addWidget(self.name_label)
         self.name_edit = QLineEdit(self)
         self.layout.addWidget(self.name_edit)
