@@ -432,6 +432,7 @@ class PVT(QWidget):
         self.red_label.show()
         self.start_time = time.time()
         self.is_red_displayed = True
+        self.timer.start(random.randint(RAND_MIN_TIME, RAND_MAX_TIME))
 
     def captureResponse(self):
         # 捕捉反应
