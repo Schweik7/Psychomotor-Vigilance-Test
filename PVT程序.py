@@ -26,11 +26,12 @@ import numpy as np
 
 TEST_CNT = 3  # 测试次数
 
+################# 这里对配置进行修改
 RAND_MIN_TIME = 1000  # 等待最小时间
 RAND_MAX_TIME = 10000  # 等待最大时间，单位是毫秒
-font = QFont("LXGW WenKai", 20)  # 选中字体
-DEBUG = False  # 生产环境
-
+font = QFont("LXGW WenKai", 20)  # 选中字体字号，我最喜欢的霞鹭文楷
+DEBUG = False  # 生产环境和开发环境切换。开发环境又更多的功能，如成绩分析，各种提示
+#################
 
 class Result(SQLModel, table=True):
     id: int = Field(primary_key=True)
@@ -400,7 +401,8 @@ class PVT(QWidget):
     def updateTimeTest(self):
         elapsed_time = time.time() - self.test_start_time  # 所有流逝的时间
         if elapsed_time >= self.target_time:
-            self.finishTest()
+            if self.is_test_started:
+                self.finishTest() # finishTest可能由于timeout时间槽不稳定，容易被多次调用
         else:
             self.status_label.setText(
                 "剩余时间: {:.0f}s".format(self.target_time - elapsed_time)
@@ -461,6 +463,7 @@ class PVT(QWidget):
         for widget in self.widgets:
             widget.show()
         self.timer.stop()
+        self.red_label.hide() 
         self.stop_button.setDisabled(True)  # 测试结束后，使“终止测试”按钮不可用
         self.result_text.append("测试完成")
         if DEBUG:

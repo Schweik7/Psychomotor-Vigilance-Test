@@ -2,5 +2,13 @@
     "[python]": {
         "editor.defaultFormatter": "ms-python.black-formatter"
     },
-    "python.formatting.provider": "none"
+    "python.formatting.provider": "none",
+    "sqltools.connections": [
+        {
+            "previewLimit": 50,
+            "driver": "SQLite",
+            "database": "${workspaceFolder:Psychomotor-Vigilance-Test}/results.db",
+            "name": "PVT成绩"
+        }
+    ]
 }
